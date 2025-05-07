@@ -1,7 +1,8 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { 
   Container, Typography, Box, Button, Paper, Alert, CircularProgress, Stack,
-  TextField, Select, MenuItem, FormControl, InputLabel, Grid, IconButton, Slider
+  TextField, Select, MenuItem, FormControl, InputLabel, Grid, IconButton, Slider,
+  Badge
 } from '@mui/material';
 import { useDropzone } from 'react-dropzone';
 import * as pdfjsLib from 'pdfjs-dist';
@@ -30,133 +31,18 @@ const DEFAULT_BACKGROUND = 'https://firebasestorage.googleapis.com/v0/b/standard
 
 function App() {
   const [pdfFiles, setPdfFiles] = useState<PDFFile[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [backgroundImage, setBackgroundImage] = useState<string>(DEFAULT_BACKGROUND);
-  const [backgroundUrl, setBackgroundUrl] = useState<string>('');
   const [marketingImages, setMarketingImages] = useState<{ [key: string]: string }>({});
-  const [overlap, setOverlap] = useState<number>(100);
-  const [tiltAngle, setTiltAngle] = useState<number>(15);
-  const [pageSize, setPageSize] = useState<number>(400);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pdfUrl, setPdfUrl] = useState('');
+  const [backgroundImage, setBackgroundImage] = useState<string | null>(DEFAULT_BACKGROUND);
+  const [backgroundUrl, setBackgroundUrl] = useState('');
+  const [pageSize, setPageSize] = useState(400);
+  const [tiltAngle, setTiltAngle] = useState(15);
+  const [overlap, setOverlap] = useState(50);
   const marketingCanvasRef = useRef<HTMLCanvasElement>(null);
 
-  const onDrop = useCallback(async (acceptedFiles: File[]) => {
-    if (acceptedFiles.length === 0) return;
-    
-    setLoading(true);
-    setError(null);
-
-    const newPdfFiles: PDFFile[] = [];
-    
-    for (const file of acceptedFiles) {
-      if (file.type !== 'application/pdf') {
-        setError('One or more files are not PDFs.');
-        continue;
-      }
-
-      try {
-        const arrayBuffer = await file.arrayBuffer();
-        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
-        const doc = await loadingTask.promise;
-        const pages: PDFPage[] = [];
-        const totalPages = doc.numPages;
-
-        for (let i = 1; i <= totalPages; i++) {
-          const page = await doc.getPage(i);
-          const viewport = page.getViewport({ scale: 1.5 });
-          const canvas = document.createElement('canvas');
-          const context = canvas.getContext('2d');
-          if (!context) continue;
-          canvas.width = viewport.width;
-          canvas.height = viewport.height;
-          await page.render({ canvasContext: context, viewport }).promise;
-          pages.push({
-            pageNum: i,
-            imageUrl: canvas.toDataURL('image/png')
-          });
-        }
-
-        newPdfFiles.push({
-          file,
-          pages,
-          selectedPages: {
-            left: pages.length >= 2 ? 2 : 1,
-            center: 1,
-            right: pages.length >= 3 ? 3 : (pages.length >= 2 ? 2 : 1)
-          }
-        });
-      } catch (e) {
-        console.error(`Failed to process ${file.name}:`, e);
-        setError(`Failed to process ${file.name}`);
-      }
-    }
-
-    setPdfFiles(prev => [...prev, ...newPdfFiles]);
-    setLoading(false);
-  }, []);
-
-  const handleBackgroundUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setBackgroundUrl(e.target.value);
-  };
-
-  const handleBackgroundUrlSubmit = () => {
-    if (backgroundUrl) {
-      setBackgroundImage(backgroundUrl);
-    }
-  };
-
-  const handleBackgroundDrop = useCallback(async (acceptedFiles: File[]) => {
-    if (acceptedFiles.length === 0) return;
-    const file = acceptedFiles[0];
-    if (!file.type.match(/^image\/(jpeg|png)$/)) {
-      setError('Please upload a JPEG or PNG image.');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      if (e.target?.result) {
-        setBackgroundImage(e.target.result as string);
-      }
-    };
-    reader.readAsDataURL(file);
-  }, []);
-
-  const { getRootProps: getPdfDropProps, getInputProps: getPdfInputProps, isDragActive: isPdfDragActive } = useDropzone({
-    onDrop,
-    accept: { 'application/pdf': ['.pdf'] },
-    multiple: true
-  });
-
-  const { getRootProps: getBgDropProps, getInputProps: getBgInputProps, isDragActive: isBgDragActive } = useDropzone({
-    onDrop: handleBackgroundDrop,
-    accept: { 'image/jpeg': ['.jpg', '.jpeg'], 'image/png': ['.png'] },
-    multiple: false
-  });
-
-  const handlePageSelection = (pdfIndex: number, position: 'left' | 'center' | 'right', pageNum: number) => {
-    setPdfFiles(prev => {
-      const newFiles = [...prev];
-      newFiles[pdfIndex].selectedPages[position] = pageNum;
-      return newFiles;
-    });
-  };
-
-  const removePdf = (index: number) => {
-    setPdfFiles(prev => {
-      const newFiles = prev.filter((_, i) => i !== index);
-      setMarketingImages(prevImages => {
-        const newImages = { ...prevImages };
-        const removedFile = prev[index];
-        if (removedFile) {
-          delete newImages[removedFile.file.name];
-        }
-        return newImages;
-      });
-      return newFiles;
-    });
-  };
-
-  const generateMarketingImage = async (pdfFile: PDFFile): Promise<string> => {
+  const generateMarketingImage = useCallback(async (pdfFile: PDFFile): Promise<string> => {
     try {
       const canvas = marketingCanvasRef.current;
       if (!canvas) {
@@ -246,13 +132,145 @@ function App() {
         }
       }
 
-      // (No label text)
-
       return canvas.toDataURL('image/png');
     } catch (error) {
       console.error('Error generating marketing image:', error);
       throw error;
     }
+  }, [backgroundImage, pageSize, tiltAngle, overlap]);
+
+  const onDrop = useCallback(async (acceptedFiles: File[]) => {
+    if (acceptedFiles.length === 0) return;
+    
+    setLoading(true);
+    setError(null);
+
+    const newPdfFiles: PDFFile[] = [];
+    
+    for (const file of acceptedFiles) {
+      if (file.type !== 'application/pdf') {
+        setError('One or more files are not PDFs.');
+        continue;
+      }
+
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+        const doc = await loadingTask.promise;
+        const pages: PDFPage[] = [];
+        const totalPages = doc.numPages;
+
+        for (let i = 1; i <= totalPages; i++) {
+          const page = await doc.getPage(i);
+          const viewport = page.getViewport({ scale: 1.5 });
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+          if (!context) continue;
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          await page.render({ canvasContext: context, viewport }).promise;
+          pages.push({
+            pageNum: i,
+            imageUrl: canvas.toDataURL('image/png')
+          });
+        }
+
+        newPdfFiles.push({
+          file,
+          pages,
+          selectedPages: {
+            left: pages.length >= 2 ? 2 : 1,
+            center: 1,
+            right: pages.length >= 3 ? 3 : (pages.length >= 2 ? 2 : 1)
+          }
+        });
+      } catch (e) {
+        console.error(`Failed to process ${file.name}:`, e);
+        setError(`Failed to process ${file.name}`);
+      }
+    }
+
+    setPdfFiles(prev => [...prev, ...newPdfFiles]);
+    
+    // Automatically generate marketing images for new PDFs
+    if (newPdfFiles.length > 0) {
+      const newImages: { [key: string]: string } = {};
+      for (const pdfFile of newPdfFiles) {
+        try {
+          const imageUrl = await generateMarketingImage(pdfFile);
+          if (imageUrl) {
+            newImages[pdfFile.file.name] = imageUrl;
+          }
+        } catch (error) {
+          console.error(`Failed to generate marketing image for ${pdfFile.file.name}:`, error);
+          setError(`Failed to generate marketing image for ${pdfFile.file.name}`);
+        }
+      }
+      setMarketingImages(prev => ({ ...prev, ...newImages }));
+    }
+    
+    setLoading(false);
+  }, [generateMarketingImage]);
+
+  const handleBackgroundUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setBackgroundUrl(e.target.value);
+  };
+
+  const handleBackgroundUrlSubmit = () => {
+    if (backgroundUrl) {
+      setBackgroundImage(backgroundUrl);
+    }
+  };
+
+  const handleBackgroundDrop = useCallback(async (acceptedFiles: File[]) => {
+    if (acceptedFiles.length === 0) return;
+    const file = acceptedFiles[0];
+    if (!file.type.match(/^image\/(jpeg|png)$/)) {
+      setError('Please upload a JPEG or PNG image.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      if (e.target?.result) {
+        setBackgroundImage(e.target.result as string);
+      }
+    };
+    reader.readAsDataURL(file);
+  }, []);
+
+  const { getRootProps: getPdfDropProps, getInputProps: getPdfInputProps, isDragActive: isPdfDragActive } = useDropzone({
+    onDrop,
+    accept: { 'application/pdf': ['.pdf'] },
+    multiple: true
+  });
+
+  const { getRootProps: getBgDropProps, getInputProps: getBgInputProps, isDragActive: isBgDragActive } = useDropzone({
+    onDrop: handleBackgroundDrop,
+    accept: { 'image/jpeg': ['.jpg', '.jpeg'], 'image/png': ['.png'] },
+    multiple: false
+  });
+
+  const handlePageSelection = (pdfIndex: number, position: 'left' | 'center' | 'right', pageNum: number) => {
+    setPdfFiles(prev => {
+      const newFiles = [...prev];
+      newFiles[pdfIndex].selectedPages[position] = pageNum;
+      return newFiles;
+    });
+  };
+
+  const removePdf = (index: number) => {
+    setPdfFiles(prev => {
+      const newFiles = prev.filter((_, i) => i !== index);
+      setMarketingImages(prevImages => {
+        const newImages = { ...prevImages };
+        const removedFile = prev[index];
+        if (removedFile) {
+          delete newImages[removedFile.file.name];
+        }
+        return newImages;
+      });
+      return newFiles;
+    });
   };
 
   const handleGenerateImages = async () => {
@@ -282,11 +300,103 @@ function App() {
     document.body.removeChild(link);
   };
 
+  const handlePdfUrlSubmit = async () => {
+    if (!pdfUrl) {
+      setError('Please enter a PDF URL');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      console.log('Fetching PDF from URL:', pdfUrl);
+      
+      // Try direct fetch first
+      let response;
+      try {
+        response = await fetch(pdfUrl, {
+          mode: 'cors',
+          credentials: 'omit',
+          headers: {
+            'Accept': 'application/pdf'
+          }
+        });
+      } catch (directFetchError) {
+        console.log('Direct fetch failed, trying with proxy...');
+        // If direct fetch fails, try with corsproxy.io
+        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(pdfUrl)}`;
+        response = await fetch(proxyUrl, {
+          headers: {
+            'Accept': 'application/pdf'
+          }
+        });
+      }
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch PDF: ${response.status} ${response.statusText}`);
+      }
+
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/pdf')) {
+        console.warn('Warning: Response content-type is not PDF:', contentType);
+      }
+
+      const blob = await response.blob();
+      console.log('PDF blob size:', blob.size, 'bytes');
+      
+      if (blob.size === 0) {
+        throw new Error('Downloaded PDF is empty');
+      }
+
+      const file = new File([blob], 'downloaded.pdf', { type: 'application/pdf' });
+      console.log('Created File object:', file.name, file.size, 'bytes');
+      
+      // Use the existing onDrop function to process the file and generate the image
+      await onDrop([file]);
+      setPdfUrl(''); // Clear the URL input after successful load
+    } catch (error: any) {
+      console.error('Error loading PDF from URL:', error);
+      let errorMessage = 'Failed to load PDF from URL. ';
+      
+      if (error.message.includes('Failed to fetch')) {
+        errorMessage += 'Could not connect to the URL. This might be due to CORS restrictions. Please try a different URL or contact the website administrator.';
+      } else if (error.message.includes('empty')) {
+        errorMessage += 'The downloaded file is empty. Please check the URL.';
+      } else if (error.message.includes('content-type')) {
+        errorMessage += 'The URL does not point to a PDF file.';
+      } else if (error.message.includes('403')) {
+        errorMessage += 'Access to the PDF was forbidden. The URL might require authentication or the server might be blocking access.';
+      } else {
+        errorMessage += error.message || 'Please check the URL and try again.';
+      }
+      
+      setError(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
-      <Typography variant="h4" gutterBottom align="center">
-        PDF Marketing Image Generator
-      </Typography>
+      <Box sx={{ position: 'relative' }}>
+        <Typography variant="h4" gutterBottom align="center">
+          PDF Marketing Image Generator
+        </Typography>
+        <Badge 
+          color="primary" 
+          badgeContent="v1.0.0" 
+          sx={{ 
+            position: 'absolute',
+            top: 0,
+            right: 0,
+            '& .MuiBadge-badge': {
+              fontSize: '0.8rem',
+              padding: '4px 8px'
+            }
+          }}
+        />
+      </Box>
 
       {/* Hidden canvas for image generation */}
       <canvas 
@@ -324,7 +434,7 @@ function App() {
                 sx={{
                   position: 'absolute',
                   inset: 0,
-                  bgcolor: 'rgba(255,255,255,0.3)', // 70% background visible
+                  bgcolor: 'rgba(255,255,255,0.3)',
                   zIndex: 1,
                 }}
               />
@@ -368,6 +478,31 @@ function App() {
           {isPdfDragActive ? 'Drop PDFs here...' : 'Drag and drop PDF files here'}
         </Typography>
       </Box>
+
+      {/* PDF URL Input */}
+      <Paper sx={{ p: 2, mb: 2 }}>
+        <Typography variant="h6" gutterBottom>Or Load PDF from URL</Typography>
+        <Grid container spacing={2} alignItems="center">
+          <Grid item xs={12}>
+            <Stack direction="row" spacing={2}>
+              <TextField
+                label="Enter PDF URL"
+                value={pdfUrl}
+                onChange={(e) => setPdfUrl(e.target.value)}
+                fullWidth
+                placeholder="https://example.com/document.pdf"
+              />
+              <Button 
+                variant="contained" 
+                onClick={handlePdfUrlSubmit}
+                disabled={loading || !pdfUrl}
+              >
+                Load PDF
+              </Button>
+            </Stack>
+          </Grid>
+        </Grid>
+      </Paper>
 
       {/* Uploaded PDFs List */}
       {pdfFiles.length > 0 && (
