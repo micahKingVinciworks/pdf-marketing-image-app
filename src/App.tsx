@@ -38,7 +38,6 @@ function App() {
   const [overlap, setOverlap] = useState<number>(100);
   const [tiltAngle, setTiltAngle] = useState<number>(15);
   const [pageSize, setPageSize] = useState<number>(400);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const marketingCanvasRef = useRef<HTMLCanvasElement>(null);
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
@@ -366,24 +365,8 @@ function App() {
       }}>
         <input {...getPdfInputProps()} />
         <Typography variant="body1">
-          {isPdfDragActive ? 'Drop PDFs here...' : 'Drag and drop PDF files here, or click to select files'}
+          {isPdfDragActive ? 'Drop PDFs here...' : 'Drag and drop PDF files here'}
         </Typography>
-        <Button variant="outlined" sx={{ mt: 2 }} onClick={() => fileInputRef.current?.click()}>
-          Choose Files
-        </Button>
-        <input
-          type="file"
-          accept="application/pdf"
-          multiple
-          style={{ display: 'none' }}
-          ref={fileInputRef}
-          onChange={(e) => {
-            if (e.target.files) {
-              onDrop(Array.from(e.target.files));
-              e.target.value = '';
-            }
-          }}
-        />
       </Box>
 
       {/* Uploaded PDFs List */}
